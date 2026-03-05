@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { auth } from "./firebase";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 
 // ─── MOCK DATA & UTILITIES ───────────────────────────────────────────────────
 
@@ -235,19 +237,30 @@ export default function GoalTracker() {
   const weeklyData = [3, 5, 4, 6, 5, 7, completedToday];
   const monthlyData = [18, 22, 19, 25, 21, 28, 24, 30, 26, 23, 29, 27];
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!authData.email || !authData.password) { setAuthError("All fields required"); return; }
-    if (authData.password.length < 6) { setAuthError("Password too short"); return; }
-    setAuthError("");
-    showNotif("✅ Welcome back! Let's crush your goals today.");
-    setScreen("app");
+    try {
+      await signInWithEmailAndPassword(auth, authData.email, authData.password);
+      setAuthError("");
+      showNotif("✅ Welcome back! Let's crush your goals today.");
+      setScreen("app");
+    } catch (error) {
+      setAuthError("Invalid email or password!");
+    }
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!authData.name || !authData.email || !authData.password) { setAuthError("All fields required"); return; }
-    setAuthError("");
-    showNotif("🎉 Account created! Your journey begins now.");
-    setScreen("app");
+    try {
+      await createUserWithEmailAndPassword(auth, authData.email, authData.password);
+      setAuthError("");
+      showNotif("🎉 Account created! Your journey begins now.");
+      setScreen("app");
+    } catch (error) {
+      if (error.code === "auth/email-already-in-use") setAuthError("Email already registered!");
+      else if (error.code === "auth/weak-password") setAuthError("Password must be 6+ characters!");
+      else setAuthError("Signup failed. Try again!");
+    }
   };
 
   const toggleGoal = (id) => {
