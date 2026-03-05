@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from "firebase/firestore";
+
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── MOCK DATA & UTILITIES ───────────────────────────────────────────────────
 
@@ -210,8 +212,18 @@ export default function GoalTracker() {
     warning: "#FCD34D",
   };
 
+  const loadGoals = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const q = query(collection(db, "goals"), where("userId", "==", user.uid));
+    const snapshot = await getDocs(q);
+    const userGoals = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, firestoreId: doc.id }));
+    if (userGoals.length > 0) setGoals(userGoals);
+  };
+
   useEffect(() => {
     showNotif("🔔 2 goals due today! Stay focused.");
+    loadGoals();
   }, []);
 
   useEffect(() => {
@@ -275,18 +287,26 @@ export default function GoalTracker() {
     }));
   };
 
-  const deleteGoal = (id) => {
+  const deleteGoal = async (id) => {
+    const goal = goals.find(g => g.id === id);
+    if (goal?.firestoreId) {
+      await deleteDoc(doc(db, "goals", goal.firestoreId));
+    }
     setGoals(gs => gs.filter(g => g.id !== id));
     showNotif("🗑 Goal removed.");
   };
 
-  const saveGoal = (goal) => {
+  const saveGoal = async (goal) => {
     if (editGoal) {
+      const goalRef = doc(db, "goals", editGoal.firestoreId);
+      await updateDoc(goalRef, goal);
       setGoals(gs => gs.map(g => g.id === editGoal.id ? { ...g, ...goal } : g));
       showNotif("✏️ Goal updated!");
     } else {
-      const newG = { ...goal, id: Date.now(), progress: 0, completed: false, createdAt: new Date().toISOString() };
-      setGoals(gs => [...gs, newG]);
+      const user = auth.currentUser;
+      const newG = { ...goal, progress: 0, completed: false, createdAt: new Date().toISOString(), userId: user.uid };
+      const docRef = await addDoc(collection(db, "goals"), newG);
+      setGoals(gs => [...gs, { ...newG, id: docRef.id, firestoreId: docRef.id }]);
       setXP(x => x + 10);
       showNotif("🎯 New goal created! +10 XP");
     }
